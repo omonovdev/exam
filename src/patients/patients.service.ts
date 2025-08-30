@@ -21,7 +21,6 @@ export class PatientsService {
 
   async create(createPatientDto: CreatePatientDto): Promise<any> {
     try {
-      // Check if patient with same phone number already exists
       const existingPatient = await this.patientRepository.findOne({
         where: { phone: createPatientDto.phone },
       });

@@ -8,6 +8,8 @@ import { Repository } from 'typeorm';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { Appointment } from './entities/appointment.entity';
+import { Worker } from '../workers/entities/worker.entity';
+import { Patient } from '../patients/entities/patient.entity';
 import { handleError } from 'src/utils/hande-error';
 import { resSuccess } from 'src/utils/succes-response';
 import { validateUUID } from 'src/utils/validate-uuid';
@@ -17,7 +19,11 @@ export class AppointmentsService {
   constructor(
     @InjectRepository(Appointment)
     private appointmentRepository: Repository<Appointment>,
-  ) {}
+    @InjectRepository(Worker)
+    private workerRepository: Repository<Worker>,
+    @InjectRepository(Patient)
+    private patientRepository: Repository<Patient>,
+  ) { }
 
   async create(createAppointmentDto: CreateAppointmentDto): Promise<any> {
     try {
@@ -53,6 +59,60 @@ export class AppointmentsService {
     return await this.appointmentRepository.find({
       relations: ['hospital', 'doctor', 'patient'],
     });
+  }
+
+  async findAllByUser(userEmail: string, userRole: string): Promise<Appointment[]> {
+    try {
+      if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') {
+        // Admin va SuperAdmin barcha appointment'larni ko'rishi mumkin
+        return await this.appointmentRepository.find({
+          relations: ['hospital', 'doctor', 'patient'],
+        });
+      }
+
+      if (userRole === 'USER') {
+        // USER rol bilan kirgan foydalanuvchi - bemor bo'lishi mumkin
+        const patient = await this.patientRepository.findOne({
+          where: { email: userEmail },
+        });
+
+        if (patient) {
+          return await this.appointmentRepository.find({
+            where: { patient_id: patient.id },
+            relations: ['hospital', 'doctor', 'patient'],
+          });
+        }
+
+        // Agar patient bo'lmasa, bo'sh array qaytaradi
+        return [];
+      }
+
+      // Boshqa role'lar uchun bo'sh array
+      return [];
+    } catch (error) {
+      handleError(error);
+      return [];
+    }
+  }
+
+  async findAllByDoctor(doctorEmail: string): Promise<Appointment[]> {
+    try {
+      const doctor = await this.workerRepository.findOne({
+        where: { email: doctorEmail },
+      });
+
+      if (!doctor) {
+        throw new NotFoundException('Doctor not found');
+      }
+
+      return await this.appointmentRepository.find({
+        where: { doctor_id: doctor.id },
+        relations: ['hospital', 'doctor', 'patient'],
+      });
+    } catch (error) {
+      handleError(error);
+      return [];
+    }
   }
 
   async findOne(id: string): Promise<Appointment | null> {
